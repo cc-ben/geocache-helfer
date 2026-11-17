@@ -743,6 +743,10 @@ textarea{min-height:84px;resize:vertical}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 details summary{cursor:pointer;color:var(--mut);font-size:13px}
 .empty{color:var(--mut);text-align:center;padding:18px 0;font-size:14px}
+.desc{max-height:50vh;overflow:auto;font-family:inherit;font-size:14px}
+.bm{display:inline-block;background:var(--acc);color:#1b1404;font-weight:700;padding:8px 14px;border-radius:10px;text-decoration:none;cursor:grab}
+.imp-tx{margin-top:8px}
+ol.steps{margin:6px 0 0;padding-left:20px;font-size:13px;color:var(--mut)}ol.steps li{margin:3px 0}
 </style>
 </head>
 <body>
@@ -766,6 +770,31 @@ details summary{cursor:pointer;color:var(--mut);font-size:13px}
 <!-- ============ CACHE ============ -->
 <section id="cache" class="on">
   <div class="card">
+    <h2>Von Geocaching.com importieren</h2>
+    <div class="row">
+      <button class="btn" id="impGpx">📄 GPX-Datei</button>
+      <button class="btn" id="impTextBtn">📋 Listing-Text</button>
+      <input type="file" id="gpxFile" accept=".gpx,.xml,application/gpx+xml,application/xml,text/xml" multiple style="display:none">
+    </div>
+    <div id="impTextBox" style="display:none">
+      <textarea id="impText" class="imp-tx" placeholder="Auf der Listing-Seite alles markieren, kopieren und hier einfügen"></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn pri" id="impTextGo">Übernehmen</button></div>
+    </div>
+    <details style="margin-top:10px">
+      <summary>⚡ Ein-Klick-Import per Lesezeichen (empfohlen)</summary>
+      <div class="hint">Liest auf der geöffneten Listing-Seite Koordinaten (auch korrigierte), Hint, Wegpunkte, deine persönliche Notiz und die Beschreibung aus und öffnet sie hier.</div>
+      <div style="margin:10px 0"><a class="bm" id="bmLink" href="#">GC → Helfer</a></div>
+      <ol class="steps">
+        <li><b>Desktop:</b> Den gelben Button in die Lesezeichenleiste ziehen.</li>
+        <li><b>Handy:</b> Irgendeine Seite als Lesezeichen speichern, Name „GC Helfer“, dann die Adresse durch den kopierten Code ersetzen.</li>
+        <li>Listing auf geocaching.com öffnen (eingeloggt) → Lesezeichen antippen. In Chrome Android dazu „GC Helfer“ in die Adresszeile tippen und den Vorschlag wählen.</li>
+      </ol>
+      <div class="row" style="margin-top:8px"><button class="btn sm" id="bmCopy">Lesezeichen-Code kopieren</button></div>
+    </details>
+    <div class="hint">GPX gibt es für Premium-Mitglieder auf jeder Listing-Seite („GPX-Datei herunterladen“) oder aus c:geo/Looking4Cache. Mehrere Caches in einer Datei (Pocket Query) landen alle in den Favoriten.</div>
+  </div>
+
+  <div class="card">
     <h2>Cache</h2>
     <div class="row">
       <input type="text" id="gc" class="gc" placeholder="GC12345" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false">
@@ -775,6 +804,7 @@ details summary{cursor:pointer;color:var(--mut);font-size:13px}
     <div class="links" id="gcLinks" style="margin-top:8px"></div>
     <label>Name</label>
     <input type="text" id="name" placeholder="z. B. Der alte Wasserturm">
+    <div class="hint" id="metaInfo"></div>
     <div class="grid2">
       <div><label>Typ</label>
         <select id="type"><option>Tradi</option><option>Multi</option><option>Mystery</option><option>Letterbox</option><option>Wherigo</option><option>Earthcache</option><option>Virtual</option><option>Event</option><option>Sonstiges</option></select></div>
@@ -794,6 +824,11 @@ details summary{cursor:pointer;color:var(--mut);font-size:13px}
       <span class="hint" style="margin:0">Spoiler-Schutz: wird nur auf Klick gezeigt</span>
     </div>
     <div class="out" id="hintOut" style="display:none"></div>
+  </div>
+
+  <div class="card" id="descCard" style="display:none">
+    <h2>Beschreibung</h2>
+    <details><summary>Listing-Text anzeigen</summary><div class="out desc" id="descOut"></div></details>
   </div>
 
   <div class="card">
@@ -1086,7 +1121,7 @@ function resolveFormula(s, vars){
 }
 
 /* ---------- State ---------- */
-const blank = () => ({gc:'',name:'',type:'Tradi',status:'open',coord:'',hint:'',vars:'',notes:'',stations:[],updated:Date.now()});
+const blank = () => ({gc:'',name:'',type:'Tradi',status:'open',coord:'',hint:'',vars:'',notes:'',stations:[],desc:'',diff:'',terr:'',size:'',owner:'',updated:Date.now()});
 let C = Object.assign(blank(), ls.get('gch.current', {}));
 let favs = ls.get('gch.favs', {});
 let customTarget = null, me = null, heading = null, acc = null, targetKey = ls.get('gch.target','listing');
@@ -1132,6 +1167,9 @@ function updateCacheInfo(){
   $('#coordInfo').innerHTML = !C.coord ? 'Formate: N 51° 08.123 E 006° 15.456 · 51.1354, 6.2576 · Grad/Min/Sek' : p ? `<span class="ok-t">✓ ${fmtDDM(p)}</span> · ${fmtDD(p)}` : '<span class="bad-t">Koordinate nicht erkannt</span>';
   $('#favBtn').textContent = favs[C.gc] ? '★ Gespeichert' : '☆ Favorit';
   $('#curLabel').textContent = C.gc ? C.gc + (C.name?' · '+C.name:'') : '–';
+  const meta=[C.diff&&('D '+C.diff),C.terr&&('T '+C.terr),C.size,C.owner&&('von '+C.owner)].filter(Boolean);
+  $('#metaInfo').textContent=meta.join(' · '); $('#metaInfo').style.display=meta.length?'block':'none';
+  $('#descCard').style.display=C.desc?'block':'none'; $('#descOut').textContent=C.desc||'';
   const used=new Set(); C.stations.forEach(s=>{ const r=resolveFormula(s.coord,{}); (r.missing||[]).forEach(x=>used.add(x)); });
   const vars=parseVars(C.vars), open=[...used].filter(x=>vars[x]===undefined);
   $('#varsInfo').innerHTML = used.size ? `Benötigt: <span class="mono">${[...used].sort().join(' ')}</span>` + (open.length?` · <span class="bad-t">fehlt: ${open.join(' ')}</span>`:' · <span class="ok-t">alle gesetzt ✓</span>') : 'Für Multis/Mysterys: Werte aus den Stationen. Formeln wie <span class="mono">N 51° 1A.(B+C)3 E 006° 0D.E00</span> werden live berechnet.';
@@ -1416,6 +1454,97 @@ function mpRun(){ const pts=$('#mpIn').value.split('\n').map(parseCoord).filter(
   $('#mpOut').innerHTML=`Mittelpunkt (${pts.length} Punkte):\n<span class="ok-t">${fmtDDM(c)}</span>\n${fmtDD(c)}`; }
 $('#mpIn').addEventListener('input',mpRun);
 
+/* ---------- Import (Bookmarklet / GPX / Text) ---------- */
+function mapType(t){ t=String(t||'');
+  return /tradi/i.test(t)?'Tradi':/multi/i.test(t)?'Multi':/myster|unknown|r(ä|ae)tsel/i.test(t)?'Mystery':/letter/i.test(t)?'Letterbox':/wherigo/i.test(t)?'Wherigo':/earth/i.test(t)?'Earthcache':/virtual/i.test(t)?'Virtual':/event|cito/i.test(t)?'Event':t?'Sonstiges':''; }
+function applyImport(p, activate){
+  const gc=String(p.gc||'').toUpperCase(); if(!/^GC[0-9A-Z]+$/.test(gc)) return false;
+  const base = JSON.parse(JSON.stringify((C.gc===gc?C:favs[gc]) || blank()));
+  const old = {}; (base.stations||[]).filter(s=>s.src==='gc').forEach(s=>old[s.name]=s);
+  const own = (base.stations||[]).filter(s=>s.src!=='gc');
+  const FRX=/[NS]\s*\d{1,2}\s*°?\s*[\dA-Z()+\-*\[\]]+[.,][\dA-Z()+\-*\[\]]+'?\s+[EWO]\s*\d{1,3}\s*°?\s*[\dA-Z()+\-*\[\]]+[.,][\dA-Z()+\-*\[\]]+/;
+  const imp = (p.stations||[]).map(s=>{ const o=old[s.name]||{}; const fm=!s.coord&&String(s.q||'').toUpperCase().match(FRX); return {name:s.name||'Wegpunkt',coord:s.coord||o.coord||(fm?fm[0]:''),q:s.q||'',done:!!o.done,final:!!s.final,src:'gc'}; });
+  const n = Object.assign(base,{gc,name:p.name||base.name,type:mapType(p.type)||base.type,coord:p.coord||base.coord,hint:p.hint||base.hint,
+    desc:p.desc||base.desc||'',diff:p.diff||base.diff||'',terr:p.terr||base.terr||'',size:p.size||base.size||'',owner:p.owner||base.owner||'',stations:imp.concat(own)});
+  const note=String(p.note||'').trim();
+  if(note && !(n.notes||'').includes(note)) n.notes=(n.notes?n.notes+'\n\n':'')+'GC-Notiz: '+note;
+  n.updated=Date.now();
+  putFav(n);
+  if(activate){ C=n; customTarget=null; targetKey=n.stations.some(s=>s.final)?'st'+n.stations.findIndex(s=>s.final):'listing'; ls.set('gch.target',targetKey); save(); loadIntoForm(); }
+  return true;
+}
+// --- Bookmarklet (runs on geocaching.com) ---
+const APP_URL = /github\.io$/.test(location.hostname) ? location.origin+location.pathname : 'https://cc-ben.github.io/geocache-helfer/';
+const BM_SRC = String.raw`(function(){var APP='__APP__';var q=function(s){return document.querySelector(s)};var tx=function(e){return e?(e.innerText||e.textContent||'').trim():''};
+var gc=(tx(q('#ctl00_ContentBody_CoordInfoLinkControl1_uxCoordInfoCode'))||((location.href.match(/GC[0-9A-Z]{2,7}/i)||[''])[0])).toUpperCase();
+if(!/^GC[0-9A-Z]+$/.test(gc)||!q('#uxLatLon')){alert('Bitte auf einer Cache-Seite von geocaching.com ausführen (eingeloggt).');return}
+var r13=function(s){var o='',b=0;for(var i=0;i<s.length;i++){var c=s[i];if(c=='[')b++;if(c==']')b=Math.max(0,b-1);if(!b&&/[a-z]/i.test(c)){var k=c<='Z'?65:97;c=String.fromCharCode((c.charCodeAt(0)-k+13)%26+k)}o+=c}return o};
+var coord=tx(q('#uxLatLon')),fin='';try{var u=window.userDefinedCoords;if(u&&u.data&&u.data.isUserDefined){fin=coord;coord=u.data.oldLatLngDisplay||coord}}catch(e){}
+var hint=tx(q('#div_hint'));var lk=tx(q('#ctl00_ContentBody_lnkDH')).toLowerCase();if(hint&&/^(encrypt|verschl)/.test(lk))hint=r13(hint);
+var st=[],re=/[NS]\s*\d+°?\s*\d+[.,]\d+'?\s*[EWO]\s*\d+°?\s*\d+[.,]\d+/;
+[].forEach.call(document.querySelectorAll('#ctl00_ContentBody_Waypoints tbody tr'),function(tr){var t=tx(tr),m=t.match(re),a=tr.querySelector('a[href*="wpt"],a[href*="aypoint"]'),im=tr.querySelector('img[alt]');
+if(a||m){var ty=im?im.alt:'',nm=tx(a)||'Wegpunkt';st.push({name:(ty&&nm.indexOf(ty)<0?ty+': ':'')+nm,coord:m?m[0]:'',q:'',final:/final/i.test(ty+nm)})}else if(st.length&&t&&!st[st.length-1].q){st[st.length-1].q=t.replace(/^(Note|Notiz|Hinweis)\s*:?\s*/i,'').slice(0,600)}});
+if(fin)st.push({name:'Final (korrigiert)',coord:fin,q:'',final:true});
+var num=function(s){var m=(s||'').match(/\d+(\.\d)?/);return m?m[0]:''};var alt=function(s){var e=q(s);return e?e.getAttribute('alt')||'':''};
+var ci=q('#cacheDetails .cacheImage');var note=tx(q('#viewCacheNote'));if(/^(click|klick)/i.test(note))note='';
+var d=(tx(q('#ctl00_ContentBody_ShortDescription'))+'\n\n'+tx(q('#ctl00_ContentBody_LongDescription'))).trim().slice(0,30000);
+var p={v:1,gc:gc,name:tx(q('#ctl00_ContentBody_CacheName')),type:ci?(ci.getAttribute('title')||tx(ci)):'',coord:coord,hint:hint,stations:st,note:note,desc:d,
+diff:num(alt('#ctl00_ContentBody_uxLegendScale img')),terr:num(alt('#ctl00_ContentBody_Localize12 img')),size:(alt('#ctl00_ContentBody_size img')||alt('.minorCacheDetails img[alt*=":"]')).replace(/^[^:]*:\s*/,''),owner:tx(q('#ctl00_ContentBody_mcd1 a'))};
+var url=APP+'#gcimport='+encodeURIComponent(JSON.stringify(p));var w=window.open(url,'_blank');if(!w)location.href=url})()`;
+const BM = 'javascript:'+encodeURIComponent(BM_SRC.replace('__APP__',APP_URL).replace(/\n/g,''));
+$('#bmLink').href=BM; $('#bmLink').addEventListener('click',e=>{ e.preventDefault(); toast('In die Lesezeichenleiste ziehen'); });
+$('#bmCopy').addEventListener('click',()=>copy(BM));
+// --- GPX ---
+const byTag=(el,t)=>el.getElementsByTagNameNS('*',t)[0];
+const tTxt=(el,t)=>{ const e=el&&byTag(el,t); return e?e.textContent.trim():''; };
+function htmlToText(h){ try{ const d=new DOMParser().parseFromString('<div>'+h+'</div>','text/html'); d.querySelectorAll('br,p,div,li,h1,h2,h3,tr').forEach(e=>e.append('\n')); return d.body.textContent.replace(/\n{3,}/g,'\n\n').trim(); }catch(e){ return h; } }
+function parseGpx(xml){
+  const doc=new DOMParser().parseFromString(xml,'application/xml'); if(doc.getElementsByTagName('parsererror').length) throw new Error('kein gültiges GPX');
+  const wpts=[...doc.getElementsByTagNameNS('*','wpt')], caches=[], extra=[];
+  wpts.forEach(w=>{ (byTag(w,'cache')?caches:extra).push(w); });
+  return caches.map(w=>{
+    const c=byTag(w,'cache'), gc=tTxt(w,'name').toUpperCase(), lat=+w.getAttribute('lat'), lon=+w.getAttribute('lon');
+    const sd=byTag(c,'short_description'), ld=byTag(c,'long_description');
+    const dtext=[sd,ld].filter(Boolean).map(e=>/true/i.test(e.getAttribute('html')||'')?htmlToText(e.textContent):e.textContent.trim()).join('\n\n');
+    const stations=extra.filter(x=>{ const nm=tTxt(x,'name').toUpperCase(); const par=tTxt(x,'Parent').toUpperCase(); return par===gc || (nm.length>2 && nm.slice(2)===gc.slice(2)); }).map(x=>{
+      const la=+x.getAttribute('lat'), lo=+x.getAttribute('lon'), ty=tTxt(x,'sym')||tTxt(x,'type').replace(/^Waypoint\|/,''), nm=tTxt(x,'desc')||ty||tTxt(x,'name');
+      return {name:(ty&&!nm.includes(ty)?ty+': ':'')+nm, coord:(la||lo)?fmtDDM({lat:la,lon:lo}):'', q:tTxt(x,'cmt'), final:/final/i.test(ty+nm)};
+    });
+    const hintPlain=tTxt(c,'encoded_hints');
+    return {gc,name:tTxt(c,'name')||tTxt(w,'urlname'),type:tTxt(c,'type'),coord:fmtDDM({lat,lon}),hint:hintPlain?rot13gc(hintPlain):'',
+      desc:dtext.slice(0,30000),diff:tTxt(c,'difficulty'),terr:tTxt(c,'terrain'),size:tTxt(c,'container'),owner:tTxt(c,'placed_by')||tTxt(c,'owner'),
+      note:tTxt(w,'GcNote')||tTxt(w,'personal_note'),stations};
+  });
+}
+$('#impGpx').addEventListener('click',()=>$('#gpxFile').click());
+$('#gpxFile').addEventListener('change',async e=>{
+  let all=[]; for(const f of e.target.files){ try{ all=all.concat(parseGpx(await f.text())); }catch(err){ toast(f.name+': '+err.message); } }
+  e.target.value='';
+  if(!all.length){ toast('Keine Caches in der Datei gefunden'); return; }
+  if(all.length===1){ applyImport(all[0],true); toast(all[0].gc+' importiert ★'); }
+  else { all.forEach(c=>applyImport(c,false)); toast(all.length+' Caches in Favoriten importiert'); show('favs'); }
+});
+// --- Pasted listing text ---
+$('#impTextBtn').addEventListener('click',()=>{ const b=$('#impTextBox'); b.style.display=b.style.display==='none'?'block':'none'; if(b.style.display==='block') $('#impText').focus(); });
+$('#impTextGo').addEventListener('click',()=>{
+  const t=$('#impText').value; const gc=(t.match(/\bGC[0-9A-Z]{2,7}\b/)||[''])[0];
+  if(!gc){ toast('Kein GC-Code im Text gefunden'); return; }
+  const re=/[NS]\s*\d{1,2}\s*°?\s*\d{1,2}[.,]\d{3}'?\s*[EWO]\s*\d{1,3}\s*°?\s*\d{1,2}[.,]\d{3}/g;
+  const cs=[...new Set(t.match(re)||[])];
+  const hm=t.match(/(?:Additional Hints|Zusätzliche Hinweise)[^\n]*\n([\s\S]*?)(?:\n\s*(?:Decryption Key|Entschlüsselungs|A\|B\|C|Decrypt|Entschlüsseln|Encrypt|Verschlüsseln)|\n\n\n|$)/i);
+  let hint=hm?hm[1].replace(/^\s*\((?:Decrypt|Entschlüsseln|Encrypt|Verschlüsseln)\)\s*/i,'').trim().slice(0,800):'';
+  applyImport({gc,coord:cs[0]||'',hint,desc:t.slice(0,30000),stations:cs.slice(1).map((c,i)=>({name:'Koordinate '+(i+2),coord:c,q:''}))},true);
+  $('#impText').value=''; $('#impTextBox').style.display='none';
+  toast(gc+' übernommen – Name & Typ bitte prüfen');
+});
+function importFromHash(){
+  const h=location.hash; if(!h.startsWith('#gcimport=')) return false;
+  try{ const p=JSON.parse(decodeURIComponent(h.slice(10))); if(applyImport(p,true)) toast(p.gc+' importiert ★'); else toast('Import fehlgeschlagen'); }
+  catch(e){ toast('Import fehlgeschlagen'); }
+  try{ history.replaceState(null,'',location.pathname+location.search+'#cache'); }catch(e){ location.hash='cache'; }
+  show('cache'); return true;
+}
+
 /* ---------- Tabs & refresh ---------- */
 function show(t){ $$('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===t)); $$('main section').forEach(s=>s.classList.toggle('on',s.id===t));
   if(t==='karte'){ setTimeout(()=>{ initMap(); map&&map.invalidateSize(); drawMap(true); },30); }
@@ -1424,10 +1553,10 @@ function show(t){ $$('nav button').forEach(b=>b.classList.toggle('on',b.dataset.
   window.scrollTo(0,0); }
 $('#nav').addEventListener('click',e=>{ const b=e.target.closest('button'); if(b) show(b.dataset.t); });
 function refreshAll(skipFit){ updateCacheInfo(); fillTargetSelects(); drawCompass(); if(map) drawMap(false); syncFavIfSaved(); }
-window.addEventListener('hashchange',()=>{ const h=location.hash.slice(1); if(document.getElementById(h)&&$('nav [data-t="'+h+'"]')) show(h); });
+window.addEventListener('hashchange',()=>{ if(importFromHash()) return; const h=location.hash.slice(1); if(document.getElementById(h)&&$('nav [data-t="'+h+'"]')) show(h); });
 
 loadIntoForm(); methodUI();
-const h0=location.hash.slice(1); if(h0&&$('nav [data-t="'+h0+'"]')) show(h0);
+if(!importFromHash()){ const h0=location.hash.slice(1); if(h0&&$('nav [data-t="'+h0+'"]')) show(h0); }
 })();
 </script>
 </body>
